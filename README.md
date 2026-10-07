@@ -11,8 +11,9 @@ SQL, runs it (read-only) and shows you the rows.
    │                                          │
    ├─ check the database connection           ├─ you ask a question
    ├─ read tables, columns, keys              ├─ find the closest schema chunks (ChromaDB)
-   ├─ save them in core.db (SQLite)           ├─ LLM agent writes a SQL query
-   └─ embed one chunk per table (ChromaDB)    └─ query runs read-only, rows are printed
+   ├─ save them in core.db (SQLite)           ├─ the agent calls search_schema (ChromaDB)
+   └─ embed one chunk per table (ChromaDB)    ├─ the agent writes SQL and calls run_query
+                                              └─ it fixes errors, retries and answers
 ```
 
 ## Requirements
@@ -58,19 +59,15 @@ uv run main.py
 ```
 
 ```
-How can I help you?: how many users are there
-Top 8 matching chunks: ...
-Generated SQL:
-SELECT COUNT(*) FROM users;
-Executing query...
-┏━━━━━━━┓
-┃ count ┃
-┡━━━━━━━┩
-│ 2     │
-└───────┘
+User : how many users are there and what are their emails
+Tool Calls
+  • search_schema(query=users)
+  • run_query(sql=SELECT ... FROM users ...)
+Response
+  There are two users: ...
 ```
 
-Keep asking questions. The agent remembers the last 3 turns, so follow-ups such
+Keep asking questions. The agent decides which tools to call, retries when a query fails, and remembers the last 5 turns, so follow-ups such
 as "now show their emails" work. Type `exit`, `quit` or `q` (or press Ctrl-C) to leave.
 
 ### 3. Disconnect
@@ -103,7 +100,7 @@ All three are in `.gitignore`.
 ```
 main.py                              CLI (--connect, --disconnect, chat)
 talktodb/src/core/
-  agent/sql_agent.py                 Agno agent that writes the SQL
+  agent/sql_agent.py                 Agno agent with search_schema and run_query tools
   artifacts/settings.py              Settings loaded from .env
   artifacts/decorator.py             opens/closes the core.db connection
   db/core/                           core.db (SQLite): connections, schemas
@@ -113,7 +110,6 @@ talktodb/src/core/
 
 ## Troubleshooting
 
-- **`CANNOT_ANSWER`**: the matching chunks did not contain what the question needs.
-  Use the table and column wording from your schema, or ask more specifically.
+- **The agent can't find the right table**: use the table and column wording from your schema, or ask more specifically.
 - **`No schema found. Run with --connect first.`**: run `uv run main.py --connect`.
 - **Schema changed in the database**: run `--connect` again to refresh it.

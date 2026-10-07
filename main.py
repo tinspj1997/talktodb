@@ -1,10 +1,8 @@
 import click
 import typer
-from rich.console import Console
-from rich.table import Table
 from sqlalchemy.exc import SQLAlchemyError
 
-from talktodb.src.core.agent.sql_agent import SqlAgent
+from talktodb.src.core.agent.sql_agent import build_sql_agent
 from talktodb.src.core.artifacts.settings import settings
 from talktodb.src.core.db.core.repository.connection import ConnectionRepository
 from talktodb.src.core.db.core.repository.schema import SchemaRepository
@@ -49,70 +47,14 @@ def disconnect() -> None:
         typer.secho("No saved connection found.", fg=typer.colors.YELLOW)
 
 
-def print_rows(rows: list[dict]) -> None:
-    """Print query results as a table."""
-    if not rows:
-        typer.secho("No rows returned.", fg=typer.colors.YELLOW)
-        return
-    table = Table(*rows[0].keys())
-    for row in rows:
-        table.add_row(*(str(value) for value in row.values()))
-    Console().print(table)
-    typer.secho(f"{len(rows)} row(s) returned.", fg=typer.colors.GREEN)
-
-
-def ask(question: str, agent: SqlAgent) -> None:
-    """Fetch the schema chunks closest to the question and list them."""
+def chat() -> None:
+    """Continuous chat with the SQL agent (type 'exit' to quit)."""
     connection = ConnectionRepository().get_by_url(settings.DATABASE_URL)
     if not connection or not connection["schema_created"]:
         raise click.ClickException("No schema found. Run with --connect first.")
 
-    chunks = SchemaVectorRepository().search(connection["id"], question)
-    typer.secho(f"Top {len(chunks)} matching chunks:", fg=typer.colors.CYAN)
-    for rank, item in enumerate(chunks, start=1):
-        typer.secho(
-            f"\n[{rank}] {item['table_name']} (distance: {item['distance']:.3f})",
-            fg=typer.colors.YELLOW,
-        )
-        typer.echo(item["chunk"])
-
-    typer.secho("\nGenerating SQL query...", fg=typer.colors.YELLOW)
-    sql = agent.generate_sql(question, chunks)
-    typer.secho("Generated SQL:", fg=typer.colors.GREEN)
-    typer.echo(sql)
-
-    if sql.strip() == "CANNOT_ANSWER":
-        return
-
-    typer.secho("\nExecuting query...", fg=typer.colors.YELLOW)
-    try:
-        rows = TargetSchemaRepository().execute_query(sql)
-    except (ValueError, SQLAlchemyError) as exc:
-        raise click.ClickException(f"Query failed: {exc}") from exc
-    print_rows(rows)
-
-
-EXIT_WORDS = {"exit", "quit", "q"}
-
-
-def chat() -> None:
-    """Continuous chat: keep answering questions until the user exits."""
-    agent = SqlAgent()  # one agent for the whole chat so it remembers earlier turns
-    typer.secho("Type 'exit' to quit.", fg=typer.colors.BRIGHT_BLACK)
-    while True:
-        try:
-            question = typer.prompt("\nHow can I help you?").strip()
-        except (click.Abort, EOFError):  # Ctrl-C / Ctrl-D
-            break
-        if not question:
-            continue
-        if question.lower() in EXIT_WORDS:
-            break
-        try:
-            ask(question, agent)
-        except click.ClickException as exc:
-            typer.secho(f"Error: {exc.message}", fg=typer.colors.RED)
-    typer.secho("Goodbye!", fg=typer.colors.CYAN)
+    agent = build_sql_agent(connection["id"])
+    agent.cli_app(stream=True, markdown=True, exit_on=["exit", "quit", "q"])
 
 
 @app.command()
@@ -124,7 +66,7 @@ def main(
         False, "--disconnect", help="Remove the saved connection and its schema."
     ),
 ) -> None:
-    """Run with --connect / --disconnect, else ask what to do."""
+    """Run with --connect / --disconnect, else start the chat."""
     if connect_db and disconnect_db:
         raise click.UsageError("Use either --connect or --disconnect, not both.")
     if disconnect_db:
