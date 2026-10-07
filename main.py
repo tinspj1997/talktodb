@@ -2,7 +2,7 @@ import click
 import typer
 from sqlalchemy.exc import SQLAlchemyError
 
-from talktodb.src.core.agent.sql_agent import build_sql_agent
+from talktodb.src.core.agent.sql_agent import sql_agent
 from talktodb.src.core.artifacts.settings import settings
 from talktodb.src.core.db.core.repository.connection import ConnectionRepository
 from talktodb.src.core.db.core.repository.schema import SchemaRepository
@@ -53,8 +53,7 @@ def chat() -> None:
     if not connection or not connection["schema_created"]:
         raise click.ClickException("No schema found. Run with --connect first.")
 
-    agent = build_sql_agent(connection["id"])
-    agent.cli_app(stream=True, markdown=True, exit_on=["exit", "quit", "q"])
+    sql_agent.cli_app(stream=True, markdown=True, exit_on=["exit", "quit", "q"])
 
 
 @app.command()
