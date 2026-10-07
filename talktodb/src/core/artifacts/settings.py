@@ -8,5 +8,9 @@ class Settings(BaseSettings):
 
     DATABASE_URL: str
 
+    LLM_BASE_URL: str = "https://api.openai.com/v1"
+    LLM_MODEL_API_KEY: str
+    LLM_MODEL_NAME: str
+
 
 settings = Settings()

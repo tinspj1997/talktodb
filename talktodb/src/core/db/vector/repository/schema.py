@@ -44,7 +44,7 @@ class SchemaVectorRepository:
         if name in {c.name for c in client.list_collections()}:
             client.delete_collection(name)
 
-    def search(self, connection_id: int, question: str, n_results: int = 3) -> list[dict]:
+    def search(self, connection_id: int, question: str, n_results: int = 8) -> list[dict]:
         """Return the chunks closest to the question, best match first."""
         client = get_vector_client()
         name = _collection_name(connection_id)

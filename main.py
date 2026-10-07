@@ -1,7 +1,10 @@
 import click
 import typer
+from rich.console import Console
+from rich.table import Table
 from sqlalchemy.exc import SQLAlchemyError
 
+from talktodb.src.core.agent.sql_agent import SqlAgent
 from talktodb.src.core.artifacts.settings import settings
 from talktodb.src.core.db.core.repository.connection import ConnectionRepository
 from talktodb.src.core.db.core.repository.schema import SchemaRepository
@@ -46,6 +49,18 @@ def disconnect() -> None:
         typer.secho("No saved connection found.", fg=typer.colors.YELLOW)
 
 
+def print_rows(rows: list[dict]) -> None:
+    """Print query results as a table."""
+    if not rows:
+        typer.secho("No rows returned.", fg=typer.colors.YELLOW)
+        return
+    table = Table(*rows[0].keys())
+    for row in rows:
+        table.add_row(*(str(value) for value in row.values()))
+    Console().print(table)
+    typer.secho(f"{len(rows)} row(s) returned.", fg=typer.colors.GREEN)
+
+
 def ask(question: str) -> None:
     """Fetch the schema chunks closest to the question and list them."""
     connection = ConnectionRepository().get_by_url(settings.DATABASE_URL)
@@ -60,6 +75,21 @@ def ask(question: str) -> None:
             fg=typer.colors.YELLOW,
         )
         typer.echo(item["chunk"])
+
+    typer.secho("\nGenerating SQL query...", fg=typer.colors.YELLOW)
+    sql = SqlAgent().generate_sql(question, chunks)
+    typer.secho("Generated SQL:", fg=typer.colors.GREEN)
+    typer.echo(sql)
+
+    if sql.strip() == "CANNOT_ANSWER":
+        return
+
+    typer.secho("\nExecuting query...", fg=typer.colors.YELLOW)
+    try:
+        rows = TargetSchemaRepository().execute_query(sql)
+    except (ValueError, SQLAlchemyError) as exc:
+        raise click.ClickException(f"Query failed: {exc}") from exc
+    print_rows(rows)
 
 
 @app.command()
