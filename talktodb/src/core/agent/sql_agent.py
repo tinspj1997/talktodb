@@ -1,4 +1,5 @@
 from agno.agent import Agent
+from agno.db.in_memory import InMemoryDb
 from agno.models.openai import OpenAIChat
 
 from talktodb.src.core.artifacts.settings import settings
@@ -30,6 +31,10 @@ class SqlAgent:
             ),
             description="PostgreSQL expert that writes SQL from schema chunks.",
             instructions=INSTRUCTIONS,
+            # Keep the last few turns so follow-up questions have context.
+            db=InMemoryDb(),
+            add_history_to_context=True,
+            num_history_runs=3,
         )
 
     def generate_sql(self, question: str, chunks: list[dict]) -> str:

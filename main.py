@@ -61,7 +61,7 @@ def print_rows(rows: list[dict]) -> None:
     typer.secho(f"{len(rows)} row(s) returned.", fg=typer.colors.GREEN)
 
 
-def ask(question: str) -> None:
+def ask(question: str, agent: SqlAgent) -> None:
     """Fetch the schema chunks closest to the question and list them."""
     connection = ConnectionRepository().get_by_url(settings.DATABASE_URL)
     if not connection or not connection["schema_created"]:
@@ -77,7 +77,7 @@ def ask(question: str) -> None:
         typer.echo(item["chunk"])
 
     typer.secho("\nGenerating SQL query...", fg=typer.colors.YELLOW)
-    sql = SqlAgent().generate_sql(question, chunks)
+    sql = agent.generate_sql(question, chunks)
     typer.secho("Generated SQL:", fg=typer.colors.GREEN)
     typer.echo(sql)
 
@@ -90,6 +90,29 @@ def ask(question: str) -> None:
     except (ValueError, SQLAlchemyError) as exc:
         raise click.ClickException(f"Query failed: {exc}") from exc
     print_rows(rows)
+
+
+EXIT_WORDS = {"exit", "quit", "q"}
+
+
+def chat() -> None:
+    """Continuous chat: keep answering questions until the user exits."""
+    agent = SqlAgent()  # one agent for the whole chat so it remembers earlier turns
+    typer.secho("Type 'exit' to quit.", fg=typer.colors.BRIGHT_BLACK)
+    while True:
+        try:
+            question = typer.prompt("\nHow can I help you?").strip()
+        except (click.Abort, EOFError):  # Ctrl-C / Ctrl-D
+            break
+        if not question:
+            continue
+        if question.lower() in EXIT_WORDS:
+            break
+        try:
+            ask(question, agent)
+        except click.ClickException as exc:
+            typer.secho(f"Error: {exc.message}", fg=typer.colors.RED)
+    typer.secho("Goodbye!", fg=typer.colors.CYAN)
 
 
 @app.command()
@@ -111,8 +134,7 @@ def main(
         connect()
         return
 
-    question = typer.prompt("How can I help you?")
-    ask(question)
+    chat()
 
 
 if __name__ == "__main__":
