@@ -24,3 +24,9 @@ class ConnectionRepository:
             """,
             (db_url, int(is_connected)),
         )
+
+    @with_core_connection
+    def delete(self, conn: sqlite3.Connection, db_url: str) -> bool:
+        """Delete the connection row (its schemas rows cascade). True if it existed."""
+        cur = conn.execute("DELETE FROM connections WHERE db_url = ?", (db_url,))
+        return cur.rowcount > 0

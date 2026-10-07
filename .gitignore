@@ -221,3 +221,4 @@ __marimo__/
 
 # local app state
 core.db
+chroma_db/
