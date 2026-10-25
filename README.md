@@ -11,7 +11,7 @@ SQL, runs it (read-only) and shows you the rows.
    │                                          │
    ├─ check the database connection           ├─ you ask a question
    ├─ read tables, columns, keys              ├─ find the closest schema chunks (ChromaDB)
-   ├─ save them in core.db (SQLite)           ├─ the agent calls search_schema (ChromaDB)
+   ├─ save them in talktodb_state.json        ├─ the agent calls search_schema (ChromaDB)
    └─ embed one chunk per table (ChromaDB)    ├─ the agent writes SQL and calls run_query
                                               └─ it fixes errors, retries and answers
 ```
@@ -76,7 +76,7 @@ as "now show their emails" work. Type `exit`, `quit` or `q` (or press Ctrl-C) to
 uv run main.py --disconnect
 ```
 
-Removes the saved connection, its schema records and its embeddings. Your
+Removes the saved connection, its schema and its embeddings. Your
 database is not touched.
 
 ## Safety
@@ -89,7 +89,7 @@ database is not touched.
 
 | Path | Purpose |
 |---|---|
-| `core.db` | SQLite file with the app's state: saved connection and one schema record per table. It includes your database URL in plain text. |
+| `talktodb_state.json` | JSON file with the app's state: each saved connection (keyed by database URL) with its id and the schema read on `--connect`. Open it to see exactly what was read. It includes your database URL, password included, in plain text. |
 | `chroma_db/` | ChromaDB folder with the embedded schema chunks. |
 | `.env` | Your settings and secrets. Do not commit it. |
 
@@ -102,8 +102,7 @@ main.py                              CLI (--connect, --disconnect, chat)
 talktodb/src/core/
   agent/sql_agent.py                 Agno agent with search_schema and run_query tools
   artifacts/settings.py              Settings loaded from .env
-  artifacts/decorator.py             opens/closes the core.db connection
-  db/core/                           core.db (SQLite): connections, schemas
+  db/core/                           talktodb_state.json: saved connections and their schemas
   db/connectors/                     the database you connect to, one connector per engine
     base.py                          BaseConnector interface, read-only SELECT check
     postgres.py                      PostgreSQL (psycopg)

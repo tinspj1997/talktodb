@@ -49,7 +49,7 @@ def search_schema(query: str) -> str:
         The matching tables with their columns, data types, keys and foreign keys.
     """
     connection = ConnectionRepository().get_by_url(settings.DATABASE_URL)
-    if not connection or not connection["schema_created"]:
+    if not connection:
         return "ERROR: No schema found. Run with --connect first."
     chunks = _vectors.search(connection["id"], query)
     if not chunks:

@@ -1,32 +1,31 @@
-import sqlite3
-
-from talktodb.src.core.artifacts.decorator import with_core_connection
+from talktodb.src.core.db.connectors.base import Schema
+from talktodb.src.core.db.core.database import load_state, save_state
 
 
 class ConnectionRepository:
-    @with_core_connection
-    def get_by_url(self, conn: sqlite3.Connection, db_url: str) -> dict | None:
-        row = conn.execute(
-            "SELECT * FROM connections WHERE db_url = ?", (db_url,)
-        ).fetchone()
-        return dict(row) if row else None
+    """Saved connections in the JSON state file, keyed by database URL."""
 
-    @with_core_connection
-    def set_connected(
-        self, conn: sqlite3.Connection, db_url: str, is_connected: bool
-    ) -> None:
-        """Insert the connection row if missing, then update is_connected."""
-        conn.execute(
-            """
-            INSERT INTO connections (db_url, is_connected)
-            VALUES (?, ?)
-            ON CONFLICT(db_url) DO UPDATE SET is_connected = excluded.is_connected
-            """,
-            (db_url, int(is_connected)),
-        )
+    def get_by_url(self, db_url: str) -> dict | None:
+        """Return {"id": ..., "schema": {...}} or None if nothing is saved."""
+        return load_state()["connections"].get(db_url)
 
-    @with_core_connection
-    def delete(self, conn: sqlite3.Connection, db_url: str) -> bool:
-        """Delete the connection row (its schemas rows cascade). True if it existed."""
-        cur = conn.execute("DELETE FROM connections WHERE db_url = ?", (db_url,))
-        return cur.rowcount > 0
+    def save(self, db_url: str, schema: Schema) -> dict:
+        """Save the schema for a connection, keeping its id if it already exists."""
+        state = load_state()
+        connections = state["connections"]
+        existing = connections.get(db_url)
+        if existing:
+            connection_id = existing["id"]
+        else:
+            connection_id = max((c["id"] for c in connections.values()), default=0) + 1
+        connections[db_url] = {"id": connection_id, "schema": schema}
+        save_state(state)
+        return connections[db_url]
+
+    def delete(self, db_url: str) -> bool:
+        """Delete the saved connection. True if it existed."""
+        state = load_state()
+        if state["connections"].pop(db_url, None) is None:
+            return False
+        save_state(state)
+        return True
