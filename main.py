@@ -2,7 +2,7 @@ import webbrowser
 
 import typer
 
-from talktodb.src.core.agent.sql_agent import sql_agent
+from talktodb.src.core.agent.sql_agent import set_answer_style, sql_agent
 from talktodb.src.core.artifacts.settings import settings
 from talktodb.src.core.db.connectors import ConnectorError, get_connector
 from talktodb.src.core.db.core.database import CORE_STATE_PATH, StateError
@@ -66,12 +66,13 @@ def show() -> None:
         typer.secho("Could not open a browser. Open the file above yourself.", fg=typer.colors.YELLOW)
 
 
-def chat() -> None:
+def chat(table: bool) -> None:
     """Continuous chat with the SQL agent (type 'exit' to quit)."""
     connection = ConnectionRepository().get_by_url(settings.DATABASE_URL)
     if not connection:
         raise fail("No schema found. Run with --connect first.")
 
+    set_answer_style(table)
     sql_agent.cli_app(stream=True, markdown=True, exit_on=["exit", "quit", "q"])
 
 
@@ -86,6 +87,9 @@ def main(
     show_graph: bool = typer.Option(
         False, "--show", help="Open the tables and relationships graph in the browser."
     ),
+    table: bool = typer.Option(
+        False, "--table", help="Chat: show answers as tables instead of descriptive text."
+    ),
 ) -> None:
     """Run with --connect / --disconnect / --show, else start the chat."""
     if connect_db + disconnect_db + show_graph > 1:
@@ -98,7 +102,7 @@ def main(
         elif show_graph:
             show()
         else:
-            chat()
+            chat(table)
     except StateError as exc:
         raise fail(str(exc)) from exc
 

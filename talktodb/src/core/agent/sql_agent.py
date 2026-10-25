@@ -30,9 +30,21 @@ INSTRUCTIONS = [
     "wording (for example synonyms or the likely table name) before giving up.",
     "If run_query returns an error, read it, fix the query and run it again.",
     "Never invent tables, columns or data. Never write INSERT, UPDATE, DELETE, DROP or DDL.",
-    "Show the SQL you ran, then a short answer and the data (as a markdown table when "
-    "there are several rows). Tell the user when no rows were returned.",
     "If the question is unrelated to the database, say so briefly.",
+    "Always start your reply with the SQL you ran in a ```sql block. Tell the user when no rows were returned.",
+]
+
+# How the answer after the SQL is written; the chat picks one (--table selects TABLE_STYLE).
+DESCRIPTIVE_STYLE = [
+    "After the SQL, answer in a descriptive way: plain sentences that explain what the data "
+    "shows, naming the actual values. Do not use tables.",
+    "When there are many rows, describe the overall picture (totals, highest, lowest, notable "
+    "patterns) and mention the most important rows by name instead of listing every row.",
+    "Explain missing values in words, e.g. 'users with no organization' instead of 'NULL'.",
+]
+TABLE_STYLE = [
+    "After the SQL, give a one-sentence answer, then all returned rows as a markdown table "
+    "with the column names as headers.",
 ]
 
 
@@ -82,7 +94,7 @@ sql_agent = Agent(
         base_url=settings.LLM_BASE_URL,
     ),
     description=f"Answers questions about a {DIALECT} database.",
-    instructions=INSTRUCTIONS,
+    instructions=INSTRUCTIONS + DESCRIPTIVE_STYLE,
     tools=[search_schema, run_query],
     # Keep the last few turns so follow-up questions have context.
     db=InMemoryDb(),
@@ -90,3 +102,8 @@ sql_agent = Agent(
     num_history_runs=5,
     markdown=True,
 )
+
+
+def set_answer_style(table: bool) -> None:
+    """Answer with markdown tables (table=True) or in descriptive sentences."""
+    sql_agent.instructions = INSTRUCTIONS + (TABLE_STYLE if table else DESCRIPTIVE_STYLE)

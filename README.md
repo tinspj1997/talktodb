@@ -70,6 +70,12 @@ Response
 Keep asking questions. The agent decides which tools to call, retries when a query fails, and remembers the last 5 turns, so follow-ups such
 as "now show their emails" work. Type `exit`, `quit` or `q` (or press Ctrl-C) to leave.
 
+Answers are written as descriptive text. To get the rows as a markdown table instead, start the chat with `--table`:
+
+```bash
+uv run main.py --table
+```
+
 ### 3. See the tables and relationships
 
 ```bash
