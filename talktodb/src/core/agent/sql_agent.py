@@ -3,17 +3,27 @@ import json
 from agno.agent import Agent
 from agno.db.in_memory import InMemoryDb
 from agno.models.openai import OpenAIResponses
-from sqlalchemy.exc import SQLAlchemyError
 
 from talktodb.src.core.artifacts.settings import settings
+from talktodb.src.core.db.connectors import ConnectorError, get_connector
 from talktodb.src.core.db.core.repository.connection import ConnectionRepository
-from talktodb.src.core.db.target.repository.schema import TargetSchemaRepository
 from talktodb.src.core.db.vector.repository.schema import SchemaVectorRepository
 
+
+def _dialect() -> str:
+    """SQL dialect of the configured database, or plain "SQL" if unsupported."""
+    try:
+        return get_connector(settings.DATABASE_URL).dialect
+    except ConnectorError:
+        return "SQL"
+
+
+DIALECT = _dialect()
+
 INSTRUCTIONS = [
-    "You answer questions about a PostgreSQL database by querying it with tools.",
+    f"You answer questions about a {DIALECT} database by querying it with tools.",
     "Work step by step: 1) call search_schema to find the relevant tables, "
-    "2) write a read-only PostgreSQL SELECT using only tables and columns returned "
+    f"2) write a read-only {DIALECT} SELECT using only tables and columns returned "
     "by search_schema, joining through the listed foreign keys, 3) run it with "
     "run_query, 4) answer the user from the returned rows.",
     "If search_schema does not return the table you need, call it again with different "
@@ -27,7 +37,6 @@ INSTRUCTIONS = [
 
 
 _vectors = SchemaVectorRepository()
-_target = TargetSchemaRepository()
 
 
 def search_schema(query: str) -> str:
@@ -40,7 +49,7 @@ def search_schema(query: str) -> str:
         The matching tables with their columns, data types, keys and foreign keys.
     """
     connection = ConnectionRepository().get_by_url(settings.DATABASE_URL)
-    if not connection or not connection["schema_created"]:
+    if not connection:
         return "ERROR: No schema found. Run with --connect first."
     chunks = _vectors.search(connection["id"], query)
     if not chunks:
@@ -49,7 +58,7 @@ def search_schema(query: str) -> str:
 
 
 def run_query(sql: str) -> str:
-    """Run one read-only PostgreSQL SELECT query and return the rows.
+    """Run one read-only SELECT query and return the rows.
 
     Args:
         sql: A single SELECT (or WITH ... SELECT) query.
@@ -58,8 +67,8 @@ def run_query(sql: str) -> str:
         The rows as JSON (at most 100), or an error message to fix the query.
     """
     try:
-        rows = _target.execute_query(sql)
-    except (ValueError, SQLAlchemyError) as exc:
+        rows = get_connector(settings.DATABASE_URL).execute_query(sql)
+    except ConnectorError as exc:
         return f"ERROR: {exc}"
     return json.dumps(rows, default=str)
 
@@ -72,7 +81,7 @@ sql_agent = Agent(
         api_key=settings.LLM_MODEL_API_KEY,
         base_url=settings.LLM_BASE_URL,
     ),
-    description="Answers questions about a PostgreSQL database.",
+    description=f"Answers questions about a {DIALECT} database.",
     instructions=INSTRUCTIONS,
     tools=[search_schema, run_query],
     # Keep the last few turns so follow-up questions have context.

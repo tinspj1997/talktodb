@@ -1,6 +1,6 @@
 # talktodb
 
-Talk to your PostgreSQL database in plain English. talktodb reads your database
+Talk to your PostgreSQL or MySQL database in plain English. talktodb reads your database
 schema, finds the tables that matter for your question, asks an LLM to write the
 SQL, runs it (read-only) and shows you the rows.
 
@@ -11,16 +11,16 @@ SQL, runs it (read-only) and shows you the rows.
    │                                          │
    ├─ check the database connection           ├─ you ask a question
    ├─ read tables, columns, keys              ├─ find the closest schema chunks (ChromaDB)
-   ├─ save them in core.db (SQLite)           ├─ the agent calls search_schema (ChromaDB)
-   └─ embed one chunk per table (ChromaDB)    ├─ the agent writes SQL and calls run_query
-                                              └─ it fixes errors, retries and answers
+   ├─ save them in talktodb_state.json        ├─ the agent calls search_schema (ChromaDB)
+   ├─ embed one chunk per table (ChromaDB)    ├─ the agent writes SQL and calls run_query
+   └─ write the schema graph page             └─ it fixes errors, retries and answers
 ```
 
 ## Requirements
 
 - Python 3.12+
 - [uv](https://docs.astral.sh/uv/)
-- A PostgreSQL database you can reach
+- A PostgreSQL or MySQL/MariaDB database you can reach
 - An OpenAI-compatible API key
 
 ## Setup
@@ -34,7 +34,7 @@ Fill in `.env`:
 
 | Variable | Description |
 |---|---|
-| `DATABASE_URL` | PostgreSQL URL, e.g. `postgresql://user:pass@host:5432/db` |
+| `DATABASE_URL` | Database URL; the scheme picks the connector: `postgresql://user:pass@host:5432/db` or `mysql://user:pass@host:3306/db` |
 | `LLM_BASE_URL` | LLM API base URL (default `https://api.openai.com/v1`) |
 | `LLM_MODEL_API_KEY` | API key for the LLM |
 | `LLM_MODEL_NAME` | Model name, e.g. `gpt-4o-mini-2024-07-18` |
@@ -70,13 +70,33 @@ Response
 Keep asking questions. The agent decides which tools to call, retries when a query fails, and remembers the last 5 turns, so follow-ups such
 as "now show their emails" work. Type `exit`, `quit` or `q` (or press Ctrl-C) to leave.
 
-### 3. Disconnect
+### 3. See the tables and relationships
+
+```bash
+uv run main.py --show
+```
+
+Opens `talktodb_schema.html` in your browser: an interactive graph with one box
+per table (its columns, with PK / FK / UQ markers) and an arrow for every foreign
+key (dashed when it is one-to-one).
+
+- Click a table, or type its name in **Find a table**, to highlight it and its
+  neighbours and list its columns, what it references and what references it.
+- Drag tables to move them, scroll to zoom, **Fit** to see everything.
+- **Tree layout** lines tables up by dependency; **Force layout** goes back.
+
+The page is rebuilt from `talktodb_state.json` each time, so it needs no
+database connection, and it shows your database URL with the password masked.
+It loads the graph library from unpkg.com, so it needs internet access; offline
+it still lists the tables.
+
+### 4. Disconnect
 
 ```bash
 uv run main.py --disconnect
 ```
 
-Removes the saved connection, its schema records and its embeddings. Your
+Removes the saved connection, its schema and its embeddings. Your
 database is not touched.
 
 ## Safety
@@ -89,11 +109,12 @@ database is not touched.
 
 | Path | Purpose |
 |---|---|
-| `core.db` | SQLite file with the app's state: saved connection and one schema record per table. It includes your database URL in plain text. |
+| `talktodb_state.json` | JSON file with the app's state: each saved connection (keyed by database URL) with its id and the schema read on `--connect`. Open it to see exactly what was read. It includes your database URL, password included, in plain text. |
+| `talktodb_schema.html` | The schema graph page written by `--connect` and `--show`. |
 | `chroma_db/` | ChromaDB folder with the embedded schema chunks. |
 | `.env` | Your settings and secrets. Do not commit it. |
 
-All three are in `.gitignore`.
+All of these are in `.gitignore`.
 
 ## Project layout
 
@@ -102,11 +123,21 @@ main.py                              CLI (--connect, --disconnect, chat)
 talktodb/src/core/
   agent/sql_agent.py                 Agno agent with search_schema and run_query tools
   artifacts/settings.py              Settings loaded from .env
-  artifacts/decorator.py             opens/closes the core.db connection
-  db/core/                           core.db (SQLite): connections, schemas
-  db/target/                         the database you connect to
+  db/core/                           talktodb_state.json: saved connections and their schemas
+  db/connectors/                     the database you connect to, one connector per engine
+    base.py                          BaseConnector interface, read-only SELECT check
+    postgres.py                      PostgreSQL (psycopg)
+    mysql.py                         MySQL / MariaDB (PyMySQL)
   db/vector/                         ChromaDB schema embeddings
+  graph/                             schema graph page (--show): schema_graph.py + HTML template
 ```
+
+## Adding a database
+
+1. Write a `BaseConnector` subclass in `talktodb/src/core/db/connectors/` that
+   implements `check_connection`, `fetch_schema` and `execute_query`, sets
+   `dialect`, and raises `ConnectorError` instead of driver exceptions.
+2. Register its URL schemes in `CONNECTORS` in `connectors/__init__.py`.
 
 ## Troubleshooting
 
