@@ -12,8 +12,8 @@ SQL, runs it (read-only) and shows you the rows.
    ├─ check the database connection           ├─ you ask a question
    ├─ read tables, columns, keys              ├─ find the closest schema chunks (ChromaDB)
    ├─ save them in talktodb_state.json        ├─ the agent calls search_schema (ChromaDB)
-   └─ embed one chunk per table (ChromaDB)    ├─ the agent writes SQL and calls run_query
-                                              └─ it fixes errors, retries and answers
+   ├─ embed one chunk per table (ChromaDB)    ├─ the agent writes SQL and calls run_query
+   └─ write the schema graph page             └─ it fixes errors, retries and answers
 ```
 
 ## Requirements
@@ -70,7 +70,27 @@ Response
 Keep asking questions. The agent decides which tools to call, retries when a query fails, and remembers the last 5 turns, so follow-ups such
 as "now show their emails" work. Type `exit`, `quit` or `q` (or press Ctrl-C) to leave.
 
-### 3. Disconnect
+### 3. See the tables and relationships
+
+```bash
+uv run main.py --show
+```
+
+Opens `talktodb_schema.html` in your browser: an interactive graph with one box
+per table (its columns, with PK / FK / UQ markers) and an arrow for every foreign
+key (dashed when it is one-to-one).
+
+- Click a table, or type its name in **Find a table**, to highlight it and its
+  neighbours and list its columns, what it references and what references it.
+- Drag tables to move them, scroll to zoom, **Fit** to see everything.
+- **Tree layout** lines tables up by dependency; **Force layout** goes back.
+
+The page is rebuilt from `talktodb_state.json` each time, so it needs no
+database connection, and it shows your database URL with the password masked.
+It loads the graph library from unpkg.com, so it needs internet access; offline
+it still lists the tables.
+
+### 4. Disconnect
 
 ```bash
 uv run main.py --disconnect
@@ -90,10 +110,11 @@ database is not touched.
 | Path | Purpose |
 |---|---|
 | `talktodb_state.json` | JSON file with the app's state: each saved connection (keyed by database URL) with its id and the schema read on `--connect`. Open it to see exactly what was read. It includes your database URL, password included, in plain text. |
+| `talktodb_schema.html` | The schema graph page written by `--connect` and `--show`. |
 | `chroma_db/` | ChromaDB folder with the embedded schema chunks. |
 | `.env` | Your settings and secrets. Do not commit it. |
 
-All three are in `.gitignore`.
+All of these are in `.gitignore`.
 
 ## Project layout
 
@@ -108,6 +129,7 @@ talktodb/src/core/
     postgres.py                      PostgreSQL (psycopg)
     mysql.py                         MySQL / MariaDB (PyMySQL)
   db/vector/                         ChromaDB schema embeddings
+  graph/                             schema graph page (--show): schema_graph.py + HTML template
 ```
 
 ## Adding a database

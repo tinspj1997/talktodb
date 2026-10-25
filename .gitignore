@@ -221,4 +221,5 @@ __marimo__/
 
 # local app state
 talktodb_state.json
+talktodb_schema.html
 chroma_db/

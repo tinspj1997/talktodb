@@ -1,3 +1,5 @@
+import webbrowser
+
 import typer
 
 from talktodb.src.core.agent.sql_agent import sql_agent
@@ -6,6 +8,7 @@ from talktodb.src.core.db.connectors import ConnectorError, get_connector
 from talktodb.src.core.db.core.database import CORE_STATE_PATH, StateError
 from talktodb.src.core.db.core.repository.connection import ConnectionRepository
 from talktodb.src.core.db.vector.repository.schema import SchemaVectorRepository
+from talktodb.src.core.graph.schema_graph import write_schema_graph
 
 app = typer.Typer(help="talktodb CLI")
 
@@ -35,6 +38,10 @@ def connect() -> None:
     SchemaVectorRepository().save(connection["id"], schema)
     typer.secho(f"Vector data saved ({len(schema)} chunks).", fg=typer.colors.GREEN)
 
+    path = write_schema_graph(settings.DATABASE_URL, schema)
+    typer.secho(f"Schema graph saved to {path}", fg=typer.colors.GREEN)
+    typer.secho("Open it with: uv run main.py --show", fg=typer.colors.CYAN)
+
 
 def disconnect() -> None:
     """Remove the saved connection, its schema and its embeddings."""
@@ -45,6 +52,18 @@ def disconnect() -> None:
         typer.secho("Disconnected. Connection, schema and embeddings removed.", fg=typer.colors.GREEN)
     else:
         typer.secho("No saved connection found.", fg=typer.colors.YELLOW)
+
+
+def show() -> None:
+    """Rebuild the schema graph page from the saved schema and open it in the browser."""
+    connection = ConnectionRepository().get_by_url(settings.DATABASE_URL)
+    if not connection:
+        raise fail("No schema found. Run with --connect first.")
+
+    path = write_schema_graph(settings.DATABASE_URL, connection["schema"])
+    typer.secho(f"Schema graph: {path}", fg=typer.colors.GREEN)
+    if not webbrowser.open(path.as_uri()):
+        typer.secho("Could not open a browser. Open the file above yourself.", fg=typer.colors.YELLOW)
 
 
 def chat() -> None:
@@ -64,15 +83,20 @@ def main(
     disconnect_db: bool = typer.Option(
         False, "--disconnect", help="Remove the saved connection and its schema."
     ),
+    show_graph: bool = typer.Option(
+        False, "--show", help="Open the tables and relationships graph in the browser."
+    ),
 ) -> None:
-    """Run with --connect / --disconnect, else start the chat."""
-    if connect_db and disconnect_db:
-        raise fail("Use either --connect or --disconnect, not both.", code=2)
+    """Run with --connect / --disconnect / --show, else start the chat."""
+    if connect_db + disconnect_db + show_graph > 1:
+        raise fail("Use only one of --connect, --disconnect or --show.", code=2)
     try:
         if disconnect_db:
             disconnect()
         elif connect_db:
             connect()
+        elif show_graph:
+            show()
         else:
             chat()
     except StateError as exc:
