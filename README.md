@@ -1,6 +1,6 @@
 # talktodb
 
-Talk to your PostgreSQL database in plain English. talktodb reads your database
+Talk to your PostgreSQL or MySQL database in plain English. talktodb reads your database
 schema, finds the tables that matter for your question, asks an LLM to write the
 SQL, runs it (read-only) and shows you the rows.
 
@@ -20,7 +20,7 @@ SQL, runs it (read-only) and shows you the rows.
 
 - Python 3.12+
 - [uv](https://docs.astral.sh/uv/)
-- A PostgreSQL database you can reach
+- A PostgreSQL or MySQL/MariaDB database you can reach
 - An OpenAI-compatible API key
 
 ## Setup
@@ -34,7 +34,7 @@ Fill in `.env`:
 
 | Variable | Description |
 |---|---|
-| `DATABASE_URL` | PostgreSQL URL, e.g. `postgresql://user:pass@host:5432/db` |
+| `DATABASE_URL` | Database URL; the scheme picks the connector: `postgresql://user:pass@host:5432/db` or `mysql://user:pass@host:3306/db` |
 | `LLM_BASE_URL` | LLM API base URL (default `https://api.openai.com/v1`) |
 | `LLM_MODEL_API_KEY` | API key for the LLM |
 | `LLM_MODEL_NAME` | Model name, e.g. `gpt-4o-mini-2024-07-18` |
@@ -104,9 +104,19 @@ talktodb/src/core/
   artifacts/settings.py              Settings loaded from .env
   artifacts/decorator.py             opens/closes the core.db connection
   db/core/                           core.db (SQLite): connections, schemas
-  db/target/                         the database you connect to
+  db/connectors/                     the database you connect to, one connector per engine
+    base.py                          BaseConnector interface, read-only SELECT check
+    postgres.py                      PostgreSQL (psycopg)
+    mysql.py                         MySQL / MariaDB (PyMySQL)
   db/vector/                         ChromaDB schema embeddings
 ```
+
+## Adding a database
+
+1. Write a `BaseConnector` subclass in `talktodb/src/core/db/connectors/` that
+   implements `check_connection`, `fetch_schema` and `execute_query`, sets
+   `dialect`, and raises `ConnectorError` instead of driver exceptions.
+2. Register its URL schemes in `CONNECTORS` in `connectors/__init__.py`.
 
 ## Troubleshooting
 

@@ -1,12 +1,11 @@
 import click
 import typer
-from sqlalchemy.exc import SQLAlchemyError
 
 from talktodb.src.core.agent.sql_agent import sql_agent
 from talktodb.src.core.artifacts.settings import settings
+from talktodb.src.core.db.connectors import ConnectorError, get_connector
 from talktodb.src.core.db.core.repository.connection import ConnectionRepository
 from talktodb.src.core.db.core.repository.schema import SchemaRepository
-from talktodb.src.core.db.target.repository.schema import TargetSchemaRepository
 from talktodb.src.core.db.vector.repository.schema import SchemaVectorRepository
 
 app = typer.Typer(help="talktodb CLI")
@@ -14,19 +13,18 @@ app = typer.Typer(help="talktodb CLI")
 
 def connect() -> None:
     """Connect to the database, save the status and the schema."""
-    target = TargetSchemaRepository()
-
     typer.secho("Connecting to database...", fg=typer.colors.YELLOW)
     try:
+        target = get_connector(settings.DATABASE_URL)
         target.check_connection()
-    except SQLAlchemyError as exc:
+        schema = target.fetch_schema()
+    except ConnectorError as exc:
         raise click.ClickException(f"Database connection failed: {exc}") from exc
     typer.secho("Database connected successfully.", fg=typer.colors.GREEN)
 
     ConnectionRepository().set_connected(settings.DATABASE_URL, True)
     typer.secho("Connection status saved.", fg=typer.colors.GREEN)
 
-    schema = target.fetch_schema()
     SchemaRepository().save(settings.DATABASE_URL, schema)
     typer.secho(f"Schema saved ({len(schema)} tables).", fg=typer.colors.GREEN)
 
